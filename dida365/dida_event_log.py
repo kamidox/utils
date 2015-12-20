@@ -74,8 +74,10 @@ class DidaEventLog(object):
             else:
                 return 0
 
+        _date_parser = lambda dstr: pd.Timestamp(dstr).date()
+
         # real data is from the third line
-        raw = pd.read_csv(self.datafile, header=3, index_col='Due Date', parse_dates=True)
+        raw = pd.read_csv(self.datafile, header=3, index_col='Due Date', parse_dates=True, date_parser=_date_parser)
         # only process the completed/archived items
         data = raw[raw['Status'] != 0].loc[:, ['List Name', 'Title']]
         # parse tags and duration
@@ -124,11 +126,9 @@ class DidaEventLog(object):
             explode = np.zeros(len(level1['Duration'].values))
             explode[-1] = 0.05
 
-        print level1['Duration']
-        print np.sum(level1['Duration'])
         plt.clf()
         _labels = lambda values: [v.decode('utf-8') for v in values]
-        title = u'统计周期: [%s - %s]' % (interval[0], interval[1])
+        title = u'时间饼图: [%s - %s]' % (interval[0], interval[1])
         if not display_routine:
             title = title + u' - 例行公事: [%d 小时/天]' % self.routine_duration
         plt.title(title)
@@ -137,15 +137,41 @@ class DidaEventLog(object):
                 autopct='%1.0f%%')
 
         if not dst_fname:
-            dst_fname = self.datafile + '.png'
+            dst_fname = self.datafile + '_pie_chart.png'
         plt.savefig(dst_fname, dpi=dpi)
 
     def workload_chart(self, interval=None, dst_fname=None, dpi=200):
         """ 工作量曲线, 主要根据指定周期的工作负荷统计 """
-        pass
+        if not self.cached:
+            self._process_data()
 
+        plt.clf()
+
+        idx = pd.date_range(start=self.start_day, end=self.end_day)
+        days = self.data_days.reindex(idx)
+        # bug: fillna with 0 will do not draw in the bar chart. So we need fillna with 1
+        days.fillna(value=1, inplace=True)
+
+        if interval is None:
+            interval = (self.start_day, self.end_day)
+        days = days.loc[interval[0]: interval[1]]
+
+        def _average(itv):
+            return np.sum(days['Duration']) / (pd.Timestamp(itv[1]) - pd.Timestamp(itv[0])).days / 60.0
+
+        plt.title(u'工作负荷: [%s - %s] - 平均时间: [%.02f 小时/天]' % (interval[0], interval[1], _average(interval)))
+        plt.xticks([])
+        plt.xlabel(u'日期')
+        plt.ylabel(u'时长（小时）')
+        plt.bar(days.index.values, days['Duration'].values / 60)
+
+        if not dst_fname:
+            dst_fname = self.datafile + '_workload_chart.png'
+        plt.savefig(dst_fname, dpi=dpi)
 
 
 if __name__ == '__main__':
     log = DidaEventLog('dida_20151220.csv')
-    log.pie_chart(display_routine=False)
+    interval = ('2015-12-10', '2015-12-18')
+    log.pie_chart(interval=interval, display_routine=False)
+    log.workload_chart(interval=interval)
