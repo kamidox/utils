@@ -34,7 +34,7 @@ class DidaEventLog(object):
         :param datafile: 数据文件全路径名，数据文件可以从 dida365.com 的设置里导出，是一个 csv 格式的文件
         :param routine_duration: 每天花在其他事情上的平均时长，比如常规的吃喝拉撒睡等，单位小时
 
-        时间小偷：routine_duration 作为一般性数据输入，便于统计出“时间小偷”。
+        时间黑洞：routine_duration 作为一般性数据输入，便于统计出“时间黑洞”。
         在做数据统计时，除了有记录的工作时间花销外，会扣除每天固定的时间花销，剩余的没被记录的时间就是时间小偷。
         我们要尽量想办法抢回被时间小偷偷走的时间。时间小偷可能是你发呆的时间，无效率的时间，做无用功的时间。
          """
@@ -69,7 +69,7 @@ class DidaEventLog(object):
                 except Exception, e:
                     print('parse duration error: \n%s' % e)
                 if m.group(2) != 'm':
-                    dur = dur * 60
+                    dur *= 60
                 return int(dur)
             else:
                 return 0
@@ -95,10 +95,22 @@ class DidaEventLog(object):
         self.data_days = days_data
         self.cached = True
 
+    def _data_from_category(self, field, period):
+        data = self.data_raw.loc[period[0]: period[1]]
+        top_level_fields = self.data_raw['List Name'].unique()
+        if field in top_level_fields:
+            d = data[data['List Name'] == field].groupby(level=0).sum()
+        else:
+            d = data[data['Tag'] == field].groupby(level=0).sum()
+
+        idx = pd.date_range(start=period[0], end=period[1])
+        # bug: fillna with 0 will do not draw in the bar chart. So we need fillna with 1
+        return d.reindex(idx).fillna(value=1)
+
     def pie_chart(self, period=None, dst_fname=None, dpi=200,
                   display_time_thief=True,
                   display_routine=False):
-        """ 显示时间饼图，重点显示出被“时间小偷”偷走的时间的百分比。
+        """ 显示时间饼图，重点显示出被“时间黑洞”偷走的时间的百分比。
 
         :param period: 统计周期，tuple 类型数据，其中 interval[0] 表示开始的日期，interval[1] 表示结束日期
         :param dst_fname: 目标文件名，如果为空，则直接在输出的文件名后加上 ‘_pie_chart.png’ 后缀
@@ -122,7 +134,7 @@ class DidaEventLog(object):
             routine = pd.DataFrame({'Duration': [_sum(period, 'Routine')]}, index=['例行公事'])
             level1 = pd.concat([level1, routine])
         if display_time_thief:
-            thief = pd.DataFrame({'Duration': [_sum(period, 'Thief')]}, index=['时间小偷'])
+            thief = pd.DataFrame({'Duration': [_sum(period, 'Thief')]}, index=['时间黑洞'])
             level1 = pd.concat([level1, thief])
             # highlight time thief
             explode = np.zeros(len(level1['Duration'].values))
@@ -140,6 +152,41 @@ class DidaEventLog(object):
 
         if not dst_fname:
             dst_fname = self.datafile + '_pie_chart.png'
+        plt.savefig(dst_fname, dpi=dpi)
+
+    def pie_chart_secondary(self, field, period=None, dst_fname=None, dpi=200):
+        """ 显示顶层分类下的子类别的时间饼图，人这个图里可以看到一段时间内, 某个主类别下面的任务的时间分配情况
+
+        :param field: 顶层类别名称
+        :param period: 统计周期，tuple 类型数据，其中 interval[0] 表示开始的日期，interval[1] 表示结束日期
+        :param dst_fname: 目标文件名，如果为空，则直接在输出的文件名后加上 ‘_pie_chart.png’ 后缀
+        :param dpi: 图片质量
+        """
+
+        if not self.cached:
+            self._process_data()
+
+        if field not in self.data_raw['List Name'].unique():
+            print('error: field %s is not an top level category.')
+            return
+
+        # select data from interval
+        if not period:
+            period = (self.start_day, self.end_day)
+        data = self.data_raw.loc[period[0]: period[1]]
+        tag_list = data.groupby(['List Name', 'Tag']).sum()
+
+        plt.clf()
+        _labels = lambda values: [v.decode('utf-8') for v in values]
+        title = u'精力分配: %s [%s - %s]' % (field.decode('utf-8'), period[0], period[1])
+        plt.title(title)
+        plt.axis('equal')
+        plt.pie(tag_list.loc[field]['Duration'].values,
+                labels=_labels(tag_list.loc[field].index.values),
+                autopct='%1.0f%%')
+
+        if not dst_fname:
+            dst_fname = self.datafile + '_pie_chart_sec.png'
         plt.savefig(dst_fname, dpi=dpi)
 
     def workload_chart(self, period=None, dst_fname=None, dpi=200):
@@ -176,7 +223,7 @@ class DidaEventLog(object):
             dst_fname = self.datafile + '_workload_chart.png'
         plt.savefig(dst_fname, dpi=dpi)
 
-    def permanent_action_chart(self, period=None, fields=None, dst_fname=None, dpi=200):
+    def permanent_action_chart(self, fields=None, period=None, dst_fname=None, dpi=200):
         """ 显示指定时间周期内，指定工作的持续时间投入信息。从这里可以看到我们的持续行动能力。
 
         :param period: 显示这个时间周期内时间统计信息
@@ -191,7 +238,6 @@ class DidaEventLog(object):
         plt.clf()
         if not period:
             period = (self.start_day, self.end_day)
-        data = self.data_raw.loc[period[0]: period[1]]
 
         top_level_fields = self.data_raw['List Name'].unique()
         if not fields:
@@ -202,27 +248,23 @@ class DidaEventLog(object):
         plt.xlabel(u'日期: [%s - %s]' % (period[0], period[1]))
         plt.ylabel(u'时长（小时）')
 
-        def _data_from_field(field):
-            if field in top_level_fields:
-                return data[data['List Name'] == field].groupby(level=0).sum()
-            else:
-                return data[data['Tag'] == field].groupby(level=0).sum()
-
         width = 0.8 / len(fields)
         woff = 0
         ci = 0
-        colors = ['r', 'g', 'b', 'c', 'k', 'y', 'm']
+        colors = ('g', 'y', 'c', 'b', 'r', 'm', 'k')
         for f in fields:
-            fdata = _data_from_field(f)
-            idx = np.arange(len(fdata.index.values))
-            plt.bar(idx + woff, fdata['Duration'].values / 60, width, facecolor=colors[ci])
-            woff = woff + width
+            data = self._data_from_category(f, period)
+            idx = np.arange(len(data.index.values))
+            plt.bar(idx + woff, data['Duration'].values / 60, width, facecolor=colors[ci])
+            woff += width
             ci = (ci + 1) % len(colors)
+
         def _fieldnames(fns):
             names = [s.decode('utf-8') for s in fns]
-            times = [_data_from_field(f)['Duration'].sum() for f in fns]
+            times = [self._data_from_category(f, period)['Duration'].sum() for f in fns]
             return [u'%s - %.02f 小时' % (n, t / 60.0) for n, t in zip(names, times)]
-        plt.legend(_fieldnames(fields))
+
+        plt.legend(_fieldnames(fields), loc='best')
         if not dst_fname:
             dst_fname = self.datafile + '_pa_chart.png'
         plt.savefig(dst_fname, dpi=dpi)
@@ -230,9 +272,10 @@ class DidaEventLog(object):
 
 if __name__ == '__main__':
     log = DidaEventLog('dida_20151220.csv')
-    period = ('2015-12-10', '2015-12-18')
+    period = ('2015-12-1', '2015-12-20')
     log.pie_chart(period=period, display_routine=False)
     log.workload_chart(period=period)
+    log.pie_chart_secondary('自我成长', period=period)
     #log.permanent_action_chart()
-    #log.permanent_action_chart(fields=['自我提升'])
-    log.permanent_action_chart(fields=['自我提升', '机器学习', '写作'])
+    log.permanent_action_chart(fields=['机器学习', '写作'], period=period)
+    #log.permanent_action_chart(fields=['自我提升', '机器学习', '写作'])
