@@ -31,8 +31,8 @@ class DidaEventLog(object):
     def __init__(self, datafile=None, routine_duration=12):
         """ create a event log for dida365.com
 
-        datafile: 数据文件全路径名，数据文件可以从 dida365.com 的设置里导出，是一个 csv 格式的文件
-        routine_duration: 每天花在其他事情上的平均时长，比如常规的吃喝拉撒睡等，单位小时
+        :param datafile: 数据文件全路径名，数据文件可以从 dida365.com 的设置里导出，是一个 csv 格式的文件
+        :param routine_duration: 每天花在其他事情上的平均时长，比如常规的吃喝拉撒睡等，单位小时
 
         时间小偷：routine_duration 作为一般性数据输入，便于统计出“时间小偷”。
         在做数据统计时，除了有记录的工作时间花销外，会扣除每天固定的时间花销，剩余的没被记录的时间就是时间小偷。
@@ -95,32 +95,34 @@ class DidaEventLog(object):
         self.data_days = days_data
         self.cached = True
 
-    def pie_chart(self, interval=None, level=0, dst_fname=None, dpi=200,
+    def pie_chart(self, period=None, dst_fname=None, dpi=200,
                   display_time_thief=True,
-                  display_routine=True):
-        """ display pie chart
+                  display_routine=False):
+        """ 显示时间饼图，重点显示出被“时间小偷”偷走的时间的百分比。
 
-        interval: 统计周期，tuple 类型数据，其中 interval[0] 表示开始的日期，interval[1] 表示结束日期
-        level: 目前只支持 0 或 1。0 表示顶层分类，1 表示自定义的标签
-        display_time_thief: 是否显示时间小偷"""
+        :param period: 统计周期，tuple 类型数据，其中 interval[0] 表示开始的日期，interval[1] 表示结束日期
+        :param dst_fname: 目标文件名，如果为空，则直接在输出的文件名后加上 ‘_pie_chart.png’ 后缀
+        :param dpi: 图片质量
+        :param display_routine: 是否显示例行事件的时间及占比
+        :param display_time_thief: 是否显示时间小偷"""
 
         if not self.cached:
             self._process_data()
 
         # select data from interval
-        if not interval:
-            interval = (self.start_day, self.end_day)
-        data = self.data_raw.loc[interval[0]: interval[1]]
+        if not period:
+            period = (self.start_day, self.end_day)
+        data = self.data_raw.loc[period[0]: period[1]]
 
         # group by List Name
         level1 = data.groupby('List Name').sum()
         explode = None
         _sum = lambda interval, field: np.sum(self.data_days[interval[0]: interval[1]])[field]
         if display_routine:
-            routine = pd.DataFrame({'Duration': [_sum(interval, 'Routine')]}, index=['例行公事'])
+            routine = pd.DataFrame({'Duration': [_sum(period, 'Routine')]}, index=['例行公事'])
             level1 = pd.concat([level1, routine])
         if display_time_thief:
-            thief = pd.DataFrame({'Duration': [_sum(interval, 'Thief')]}, index=['时间小偷'])
+            thief = pd.DataFrame({'Duration': [_sum(period, 'Thief')]}, index=['时间小偷'])
             level1 = pd.concat([level1, thief])
             # highlight time thief
             explode = np.zeros(len(level1['Duration'].values))
@@ -128,7 +130,7 @@ class DidaEventLog(object):
 
         plt.clf()
         _labels = lambda values: [v.decode('utf-8') for v in values]
-        title = u'时间饼图: [%s - %s]' % (interval[0], interval[1])
+        title = u'时间饼图: [%s - %s]' % (period[0], period[1])
         if not display_routine:
             title = title + u' - 例行公事: [%d 小时/天]' % self.routine_duration
         plt.title(title)
@@ -140,8 +142,13 @@ class DidaEventLog(object):
             dst_fname = self.datafile + '_pie_chart.png'
         plt.savefig(dst_fname, dpi=dpi)
 
-    def workload_chart(self, interval=None, dst_fname=None, dpi=200):
-        """ 工作量曲线, 主要根据指定周期的工作负荷统计 """
+    def workload_chart(self, period=None, dst_fname=None, dpi=200):
+        """ 工作量曲线, 显示指定时间周期内的工作量柱状图，可以看一段时间的工作负荷情况及平均值
+
+        :param period: 显示这个时间周期内的工作负荷柱状图
+        :param dst_file: 输出的图片文件名，如果没指定，则直接在输入文件名后加 '_workload_chart.png' 后缀
+        :param dpi: 图片质量
+        """
         if not self.cached:
             self._process_data()
 
@@ -152,16 +159,16 @@ class DidaEventLog(object):
         # bug: fillna with 0 will do not draw in the bar chart. So we need fillna with 1
         days.fillna(value=1, inplace=True)
 
-        if interval is None:
-            interval = (self.start_day, self.end_day)
-        days = days.loc[interval[0]: interval[1]]
+        if not period:
+            period = (self.start_day, self.end_day)
+        days = days.loc[period[0]: period[1]]
 
-        def _average(itv):
-            return np.sum(days['Duration']) / (pd.Timestamp(itv[1]) - pd.Timestamp(itv[0])).days / 60.0
+        def _average(p):
+            return np.sum(days['Duration']) / (pd.Timestamp(p[1]) - pd.Timestamp(p[0])).days / 60.0
 
-        plt.title(u'工作负荷: [%s - %s] - 平均时间: [%.02f 小时/天]' % (interval[0], interval[1], _average(interval)))
+        plt.title(u'工作负荷: [%.02f 小时/天]' % _average(period))
         plt.xticks([])
-        plt.xlabel(u'日期')
+        plt.xlabel(u'日期: [%s - %s]' % (period[0], period[1]))
         plt.ylabel(u'时长（小时）')
         plt.bar(days.index.values, days['Duration'].values / 60)
 
@@ -169,9 +176,63 @@ class DidaEventLog(object):
             dst_fname = self.datafile + '_workload_chart.png'
         plt.savefig(dst_fname, dpi=dpi)
 
+    def permanent_action_chart(self, period=None, fields=None, dst_fname=None, dpi=200):
+        """ 显示指定时间周期内，指定工作的持续时间投入信息。从这里可以看到我们的持续行动能力。
+
+        :param period: 显示这个时间周期内时间统计信息
+        :param fields: 要统计的工作列表。如果没有提供，则直接显示顶层类别的工作时间柱状图。
+        :param dst_fname: 目标图表保存的文件名，如果没有提供，则在输入文件后加上 '_pa_chart.png' 后缀。
+        :param dpi: 图片质量
+        :return: 无
+        """
+        if not self.cached:
+            self._process_data()
+
+        plt.clf()
+        if not period:
+            period = (self.start_day, self.end_day)
+        data = self.data_raw.loc[period[0]: period[1]]
+
+        top_level_fields = self.data_raw['List Name'].unique()
+        if not fields:
+            fields = top_level_fields
+
+        plt.title(u'持续行动')
+        plt.xticks([])
+        plt.xlabel(u'日期: [%s - %s]' % (period[0], period[1]))
+        plt.ylabel(u'时长（小时）')
+
+        def _data_from_field(field):
+            if field in top_level_fields:
+                return data[data['List Name'] == field].groupby(level=0).sum()
+            else:
+                return data[data['Tag'] == field].groupby(level=0).sum()
+
+        width = 0.8 / len(fields)
+        woff = 0
+        ci = 0
+        colors = ['r', 'g', 'b', 'c', 'k', 'y', 'm']
+        for f in fields:
+            fdata = _data_from_field(f)
+            idx = np.arange(len(fdata.index.values))
+            plt.bar(idx + woff, fdata['Duration'].values / 60, width, facecolor=colors[ci])
+            woff = woff + width
+            ci = (ci + 1) % len(colors)
+        def _fieldnames(fns):
+            names = [s.decode('utf-8') for s in fns]
+            times = [_data_from_field(f)['Duration'].sum() for f in fns]
+            return [u'%s - %.02f 小时' % (n, t / 60.0) for n, t in zip(names, times)]
+        plt.legend(_fieldnames(fields))
+        if not dst_fname:
+            dst_fname = self.datafile + '_pa_chart.png'
+        plt.savefig(dst_fname, dpi=dpi)
+
 
 if __name__ == '__main__':
     log = DidaEventLog('dida_20151220.csv')
-    interval = ('2015-12-10', '2015-12-18')
-    log.pie_chart(interval=interval, display_routine=False)
-    log.workload_chart(interval=interval)
+    period = ('2015-12-10', '2015-12-18')
+    log.pie_chart(period=period, display_routine=False)
+    log.workload_chart(period=period)
+    #log.permanent_action_chart()
+    #log.permanent_action_chart(fields=['自我提升'])
+    log.permanent_action_chart(fields=['自我提升', '机器学习', '写作'])
