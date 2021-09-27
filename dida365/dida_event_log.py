@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 # -*- encoding: utf-8 -*-
 import pandas as pd
 import numpy as np
@@ -77,6 +78,7 @@ class DidaEventLog(object):
         _date_parser = lambda dstr: pd.Timestamp(dstr).date()
 
         # real data is from the third line
+        print('loading data from %s ...' % self.datafile)
         raw = pd.read_csv(self.datafile, header=3, index_col='Due Date', parse_dates=True, date_parser=_date_parser)
         # only process the completed/archived items
         data = raw[raw['Status'] != 0].loc[:, ['List Name', 'Title']]
@@ -87,6 +89,7 @@ class DidaEventLog(object):
         # calcute total duration
         self.start_day = str(pd.Timestamp(data.index.values.min()).date())
         self.end_day = str(pd.Timestamp(data.index.values.max()).date())
+        data.sort_index(inplace=True)
         self.data_raw = data
         # cache days data
         days_data = data.groupby(level=0).sum()
@@ -94,6 +97,7 @@ class DidaEventLog(object):
         days_data['Routine'] = self.routine_duration * 60
         self.data_days = days_data
         self.cached = True
+        print('loaded %d items' % len(data))
 
     def _data_from_category(self, field, period):
         data = self.data_raw.loc[period[0]: period[1]]
@@ -141,17 +145,17 @@ class DidaEventLog(object):
             explode[-1] = 0.05
 
         plt.clf()
-        _labels = lambda values: [v.decode('utf-8') for v in values]
         title = u'时间饼图: [%s - %s]' % (period[0], period[1])
         if not display_routine:
             title = title + u' - 例行公事: [%d 小时/天]' % self.routine_duration
         plt.title(title)
         plt.axis('equal')
-        plt.pie(level1['Duration'].values, explode=explode, labels=_labels(level1.index.values),
+        plt.pie(level1['Duration'].values, explode=explode, labels=level1.index.values,
                 autopct='%1.0f%%')
 
         if not dst_fname:
             dst_fname = self.datafile + '_pie_chart.png'
+        print('save pie chart to %s' % dst_fname)
         plt.savefig(dst_fname, dpi=dpi)
 
     def pie_chart_secondary(self, field, period=None, dst_fname=None, dpi=200):
@@ -177,16 +181,16 @@ class DidaEventLog(object):
         tag_list = data.groupby(['List Name', 'Tag']).sum()
 
         plt.clf()
-        _labels = lambda values: [v.decode('utf-8') for v in values]
-        title = u'精力分配: %s [%s - %s]' % (field.decode('utf-8'), period[0], period[1])
+        title = u'精力分配: %s [%s - %s]' % (field, period[0], period[1])
         plt.title(title)
         plt.axis('equal')
         plt.pie(tag_list.loc[field]['Duration'].values,
-                labels=_labels(tag_list.loc[field].index.values),
+                labels=tag_list.loc[field].index.values,
                 autopct='%1.0f%%')
 
         if not dst_fname:
             dst_fname = self.datafile + '_pie_chart_sec.png'
+        print('save secondary pie chart to %s' % dst_fname)
         plt.savefig(dst_fname, dpi=dpi)
 
     def workload_chart(self, period=None, dst_fname=None, dpi=200):
@@ -221,6 +225,7 @@ class DidaEventLog(object):
 
         if not dst_fname:
             dst_fname = self.datafile + '_workload_chart.png'
+        print('save work load chart to %s' % dst_fname)
         plt.savefig(dst_fname, dpi=dpi)
 
     def permanent_action_chart(self, fields=None, period=None, dst_fname=None, dpi=200):
@@ -260,19 +265,20 @@ class DidaEventLog(object):
             ci = (ci + 1) % len(colors)
 
         def _fieldnames(fns):
-            names = [s.decode('utf-8') for s in fns]
+            names = fns
             times = [self._data_from_category(f, period)['Duration'].sum() for f in fns]
             return [u'%s - %.02f 小时' % (n, t / 60.0) for n, t in zip(names, times)]
 
         plt.legend(_fieldnames(fields), loc='best')
         if not dst_fname:
             dst_fname = self.datafile + '_pa_chart.png'
+        print('save permannet action chart to %s' % dst_fname)
         plt.savefig(dst_fname, dpi=dpi)
 
 
 if __name__ == '__main__':
-    log = DidaEventLog('~/Downloads/Dida-backup-2021-09-27.csv')
-    period = ('2021-9-1', '2021-9-30')
+    log = DidaEventLog('Dida-backup-2021-09-27.csv')
+    period = ('2021-9-25', '2021-12-31')
     log.pie_chart(period=period, display_routine=False)
     log.workload_chart(period=period)
     log.pie_chart_secondary('本职工作', period=period)
