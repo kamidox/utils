@@ -52,24 +52,25 @@ log.permanent_action_chart(fields=['机器学习', '写作'], period=period)
 
 **时间总览**
 
-![时间总览](https://raw.githubusercontent.com/kamidox/blogs/master/images/dida365_pie_chart.png)
+![时间总览](http://blog.kamidox.com/images/dida365_pie_chart.png)
 
 从这个图表可以清晰地看到 dida365 里面各个顶层类别事件的时间分配。看看那个**时间黑洞**，那些就是被偷走的时间。
 
 **工作负荷**
 
-![工作负荷](https://raw.githubusercontent.com/kamidox/blogs/master/images/dida365_workload_chart.png)
+![工作负荷](http://blog.kamidox.com/images/dida365_workload_chart.png)
 
 从时间维度查看我们的工作负荷。一目了然。
 
 **精力分配**
 
-![工作负荷](https://raw.githubusercontent.com/kamidox/blogs/master/images/dida365_pie_chart_sec.png)
+![工作负荷](http://blog.kamidox.com/images/dida365_pie_chart_sec.png)
 
 顶层事件类型下可以有事件子类别，从精力分配图可以清晰地看出来我们的时间花在哪些事情上了。
 
 **持续行动**
 
-![持续行动](https://raw.githubusercontent.com/kamidox/blogs/master/images/dida365_pa_chart.png)
+![持续行动](http://blog.kamidox.com/images/dida365_pa_chart.png)
 
 选定我们感兴趣的事件类型，我们可以查看一定周期内，我们的精力投入情况。监督自己持续行动。
+
