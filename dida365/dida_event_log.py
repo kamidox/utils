@@ -20,9 +20,9 @@ def supported_chinese_font():
     zh_fonts = set(f.split(',', 1)[0] for f in output.split('\n'))
     available = mat_fonts & zh_fonts
 
-    print '*' * 10, '可用的中文字体', '*' * 10
+    print('*' * 10, '可用的中文字体', '*' * 10)
     for f in available:
-        print f
+        print(f)
     return available
 
 
@@ -66,7 +66,7 @@ class DidaEventLog(object):
                 dur = 0
                 try:
                     dur = float(m.group(1))
-                except Exception, e:
+                except Exception(e):
                     print('parse duration error: \n%s' % e)
                 if m.group(2) != 'm':
                     dur *= 60
@@ -271,11 +271,11 @@ class DidaEventLog(object):
 
 
 if __name__ == '__main__':
-    log = DidaEventLog('dida_20151220.csv')
-    period = ('2015-12-1', '2015-12-20')
+    log = DidaEventLog('~/Downloads/Dida-backup-2021-09-27.csv')
+    period = ('2021-9-1', '2021-9-30')
     log.pie_chart(period=period, display_routine=False)
     log.workload_chart(period=period)
-    log.pie_chart_secondary('自我成长', period=period)
+    log.pie_chart_secondary('本职工作', period=period)
     #log.permanent_action_chart()
-    log.permanent_action_chart(fields=['机器学习', '写作'], period=period)
+    log.permanent_action_chart(fields=['编程', '健身运动'], period=period)
     #log.permanent_action_chart(fields=['自我提升', '机器学习', '写作'])
